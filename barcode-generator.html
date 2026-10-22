@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#f5f7fb" />
+  <title>Barcode & QR Generator</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #718096;
+      --line: #e6eaf1;
+      --panel: #ffffff;
+      --canvas: #f5f7fb;
+      --purple: #6657e8;
+      --purple-dark: #5144c8;
+      --purple-soft: #f0eeff;
+      --shadow: 0 20px 55px rgba(31, 42, 68, .09);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 36px 18px;
+      background: radial-gradient(circle at 50% -15%, #e8e7ff 0, transparent 34%), var(--canvas);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .app { width: min(100%, 700px); margin: 0 auto; }
+    .brand { display: flex; align-items: center; justify-content: center; gap: 11px; margin-bottom: 25px; }
+    .brand-mark {
+      display: grid; place-items: center; width: 42px; height: 42px;
+      border-radius: 14px; color: white; background: var(--purple);
+      box-shadow: 0 7px 16px rgba(102,87,232,.25);
+    }
+    .brand-mark svg { width: 23px; height: 23px; }
+    .brand h1 { margin: 0; font-size: 20px; letter-spacing: -.5px; font-weight: 760; }
+    .brand p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
+    .panel { background: var(--panel); border: 1px solid rgba(226,231,241,.9); border-radius: 23px; box-shadow: var(--shadow); overflow: hidden; }
+    .panel-header { padding: 25px 26px 0; }
+    .eyebrow { color: var(--purple); text-transform: uppercase; letter-spacing: 1.3px; font-size: 10px; font-weight: 800; margin-bottom: 8px; }
+    .panel-header h2 { margin: 0; font-size: clamp(22px, 4vw, 29px); letter-spacing: -1px; }
+    .panel-header p { margin: 8px 0 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+    .mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 23px 26px 0; padding: 5px; background: #f4f5fa; border: 1px solid #ebedf4; border-radius: 14px; }
+    .mode-button { display: flex; justify-content: center; align-items: center; gap: 8px; min-height: 43px; border: 0; border-radius: 10px; color: #687389; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; background: transparent; transition: .18s ease; }
+    .mode-button svg { width: 17px; height: 17px; }
+    .mode-button.active { background: white; color: var(--purple-dark); box-shadow: 0 2px 7px rgba(28,38,64,.09); }
+    .preview-wrap { padding: 18px 26px 0; }
+    .preview {
+      display: flex; align-items: center; justify-content: center; flex-direction: column;
+      min-height: 215px; padding: 22px 16px; border: 1px dashed #dce1ec; border-radius: 16px;
+      background: linear-gradient(180deg, #fff, #fcfcff); overflow: hidden;
+    }
+    #barcodeSvg { display: block; max-width: 100%; height: auto; }
+    #qrCanvasBox { display: none; align-items: center; justify-content: center; width: 100%; }
+    #qrCanvasBox canvas, #qrCanvasBox img { max-width: min(100%, 220px); height: auto !important; image-rendering: pixelated; }
+    .empty-state { color: #9aa3b4; display: flex; align-items: center; flex-direction: column; gap: 11px; font-size: 13px; text-align: center; }
+    .empty-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 15px; color: #8b82ee; background: var(--purple-soft); }
+    .empty-icon svg { width: 25px; height: 25px; }
+    .preview-status { color: #9aa3b4; font-size: 11px; margin-top: 12px; min-height: 15px; text-align: center; }
+    .content { padding: 24px 26px 26px; }
+    .field-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 9px; }
+    label { font-size: 13px; font-weight: 750; }
+    .char-count { color: #98a1b1; font-size: 11px; font-variant-numeric: tabular-nums; }
+    .input-wrap { position: relative; }
+    input[type="text"] { width: 100%; min-height: 52px; padding: 0 48px 0 15px; border: 1px solid #dfe4ee; border-radius: 12px; outline: none; color: var(--ink); background: white; font: 500 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .2px; transition: border-color .18s, box-shadow .18s; }
+    input[type="text"]:focus { border-color: #8c82f0; box-shadow: 0 0 0 4px rgba(102,87,232,.1); }
+    input::placeholder { color: #b0b7c4; font-family: inherit; }
+    .clear-input { position: absolute; right: 8px; top: 8px; height: 36px; width: 36px; display: grid; place-items: center; border: 0; border-radius: 9px; color: #8992a2; background: transparent; cursor: pointer; }
+    .clear-input:hover { color: var(--ink); background: #f3f4f8; }
+    .clear-input svg { width: 17px; height: 17px; }
+    .prefix-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 21px 0 10px; }
+    .prefix-heading span { color: var(--muted); font-size: 11px; }
+    .prefixes { display: flex; flex-wrap: wrap; gap: 8px; }
+    .prefix-button { padding: 9px 12px; border: 1px solid #e2e5ef; border-radius: 9px; color: #4c566b; background: #fff; font: 700 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; cursor: pointer; transition: .15s ease; }
+    .prefix-button:hover { border-color: #b6affb; color: var(--purple-dark); background: #f8f7ff; transform: translateY(-1px); }
+    .prefix-button:active { transform: translateY(0); }
+    .actions { display: flex; gap: 9px; margin-top: 23px; }
+    .action-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; padding: 0 16px; border-radius: 11px; font-family: inherit; font-size: 13px; font-weight: 750; cursor: pointer; transition: .18s ease; }
+    .action-button svg { width: 16px; height: 16px; }
+    .action-button.primary { flex: 1; border: 1px solid var(--purple); color: white; background: var(--purple); box-shadow: 0 5px 12px rgba(102,87,232,.18); }
+    .action-button.primary:hover { background: var(--purple-dark); }
+    .action-button.secondary { border: 1px solid #e0e4ed; color: #4f596d; background: white; }
+    .action-button.secondary:hover { background: #f8f9fc; }
+    .action-button:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+    .footer { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 16px; color: #99a1b0; font-size: 11px; }
+    .footer svg { width: 13px; height: 13px; }
+    .toast { position: fixed; bottom: 22px; left: 50%; transform: translate(-50%, 12px); opacity: 0; pointer-events: none; padding: 11px 15px; border-radius: 11px; background: #20283a; color: #fff; box-shadow: 0 8px 24px rgba(0,0,0,.18); font-size: 13px; transition: .2s ease; z-index: 10; white-space: nowrap; }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    @media (max-width: 520px) {
+      body { padding: 20px 12px; }
+      .brand { margin-bottom: 18px; }
+      .panel { border-radius: 19px; }
+      .panel-header { padding: 21px 18px 0; }
+      .mode-switch { margin: 19px 18px 0; }
+      .preview-wrap { padding: 14px 18px 0; }
+      .preview { min-height: 190px; padding: 18px 9px; }
+      .content { padding: 21px 18px 20px; }
+      .prefixes { gap: 7px; }
+      .prefix-button { padding: 9px 10px; }
+      .actions { gap: 8px; }
+      .action-button { padding: 0 12px; }
+      .action-button.secondary span { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4v16M7 4v16M11 4v16M14 4v16M17 4v16M20 4v16" /></svg>
+      </div>
+      <div><h1>Code Studio</h1><p>Quick barcode & QR generator</p></div>
+    </header>
+
+    <section class="panel" aria-labelledby="page-title">
+      <div class="panel-header">
+        <div class="eyebrow">Simple · Fast · Ready to scan</div>
+        <h2 id="page-title">Make a code in seconds.</h2>
+        <p>Enter your text, choose a format, and your code is ready instantly.</p>
+      </div>
+
+      <div class="mode-switch" role="group" aria-label="Choose code format">
+        <button class="mode-button active" id="barcodeMode" type="button" aria-pressed="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 5v14M7 5v14M10 5v14M14 5v14M17 5v14M20 5v14" /></svg> Barcode
+        </button>
+        <button class="mode-button" id="qrMode" type="button" aria-pressed="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v2M17 20h4M20 18v3" /></svg> QR Code
+        </button>
+      </div>
+
+      <div class="preview-wrap">
+        <div class="preview" id="preview" aria-live="polite">
+          <div class="empty-state" id="emptyState">
+            <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 5v14M7 5v14M10 5v14M14 5v14M17 5v14M20 5v14" /></svg></div>
+            <span>Your generated code will appear here</span>
+          </div>
+          <svg id="barcodeSvg" role="img" aria-label="Generated barcode" style="display:none"></svg>
+          <div id="qrCanvasBox" aria-label="Generated QR code"></div>
+        </div>
+        <div class="preview-status" id="previewStatus">Waiting for text</div>
+      </div>
+
+      <div class="content">
+        <div class="field-row">
+          <label for="codeInput">Text to encode</label>
+          <span class="char-count" id="charCount">0 characters</span>
+        </div>
+        <div class="input-wrap">
+          <input id="codeInput" type="text" autocomplete="off" spellcheck="false" placeholder="e.g. RELAY-GB12345" maxlength="300" aria-describedby="inputHelp" />
+          <button class="clear-input" id="clearButton" type="button" title="Clear input" aria-label="Clear input">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg>
+          </button>
+        </div>
+        <div class="prefix-heading"><label>Quick prefixes</label><span>Tap to insert at the start</span></div>
+        <div class="prefixes" id="prefixes">
+          <button class="prefix-button" type="button" data-prefix="RYUK">RYUK</button>
+          <button class="prefix-button" type="button" data-prefix="OS">OS</button>
+          <button class="prefix-button" type="button" data-prefix="TIH">TIH</button>
+          <button class="prefix-button" type="button" data-prefix="UKLO">UKLO</button>
+          <button class="prefix-button" type="button" data-prefix="SZCW">SZCW</button>
+          <button class="prefix-button" type="button" data-prefix="RELAY-GB">RELAY-GB</button>
+        </div>
+        <div class="actions">
+          <button class="action-button primary" id="downloadButton" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m-5-5 5 5 5-5M4 17v3h16v-3" /></svg>
+            <span id="downloadLabel">Download barcode</span>
+          </button>
+          <button class="action-button secondary" id="copyButton" type="button" disabled title="Copy text">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></svg><span>Copy text</span>
+          </button>
+        </div>
+      </div>
+    </section>
+    <div class="footer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3" /></svg> Your text stays in this page.</div>
+  </main>
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script>
+    (() => {
+      const input = document.getElementById('codeInput');
+      const barcodeMode = document.getElementById('barcodeMode');
+      const qrMode = document.getElementById('qrMode');
+      const barcodeSvg = document.getElementById('barcodeSvg');
+      const qrCanvasBox = document.getElementById('qrCanvasBox');
+      const emptyState = document.getElementById('emptyState');
+      const previewStatus = document.getElementById('previewStatus');
+      const charCount = document.getElementById('charCount');
+      const downloadButton = document.getElementById('downloadButton');
+      const downloadLabel = document.getElementById('downloadLabel');
+      const copyButton = document.getElementById('copyButton');
+      const toast = document.getElementById('toast');
+      let mode = 'barcode';
+      let hasCode = false;
+      let toastTimer;
+
+      function showToast(message) {
+        toast.textContent = message;
+        toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove('show'), 1900);
+      }
+
+      function switchMode(nextMode) {
+        mode = nextMode;
+        const isBarcode = mode === 'barcode';
+        barcodeMode.classList.toggle('active', isBarcode);
+        qrMode.classList.toggle('active', !isBarcode);
+        barcodeMode.setAttribute('aria-pressed', String(isBarcode));
+        qrMode.setAttribute('aria-pressed', String(!isBarcode));
+        barcodeSvg.style.display = 'none';
+        qrCanvasBox.style.display = 'none';
+        emptyState.style.display = 'flex';
+        downloadLabel.textContent = isBarcode ? 'Download barcode' : 'Download QR code';
+        render();
+      }
+
+      function render() {
+        const value = input.value.trim();
+        charCount.textContent = `${input.value.length} ${input.value.length === 1 ? 'character' : 'characters'}`;
+        barcodeSvg.style.display = 'none';
+        qrCanvasBox.style.display = 'none';
+        emptyState.style.display = 'flex';
+        qrCanvasBox.innerHTML = '';
+        hasCode = false;
+        downloadButton.disabled = true;
+        copyButton.disabled = !value;
+
+        if (!value) {
+          previewStatus.textContent = 'Waiting for text';
+          return;
+        }
+
+        if (mode === 'barcode') {
+          if (!window.JsBarcode) {
+            previewStatus.textContent = 'Could not load barcode library. Check your internet connection.';
+            return;
+          }
+          try {
+            JsBarcode(barcodeSvg, value, {
+              format: 'CODE128',
+              lineColor: '#172033',
+              background: '#ffffff',
+              width: 2,
+              height: 82,
+              margin: 10,
+              displayValue: true,
+              font: 'monospace',
+              fontSize: 15,
+              textMargin: 7,
+              textPosition: 'bottom'
+            });
+            barcodeSvg.style.display = 'block';
+            emptyState.style.display = 'none';
+            hasCode = true;
+            previewStatus.textContent = 'CODE 128 · Updates as you type';
+          } catch (error) {
+            previewStatus.textContent = 'This text could not be encoded as a barcode.';
+            return;
+          }
+        } else {
+          if (!window.QRCode) {
+            previewStatus.textContent = 'Could not load QR library. Check your internet connection.';
+            return;
+          }
+          try {
+            qrCanvasBox.style.display = 'flex';
+            new QRCode(qrCanvasBox, {
+              text: value,
+              width: 220,
+              height: 220,
+              colorDark: '#172033',
+              colorLight: '#ffffff',
+              correctLevel: QRCode.CorrectLevel.H
+            });
+            emptyState.style.display = 'none';
+            hasCode = true;
+            previewStatus.textContent = 'QR CODE · Updates as you type';
+          } catch (error) {
+            previewStatus.textContent = 'This text could not be encoded as a QR code.';
+            qrCanvasBox.style.display = 'none';
+            return;
+          }
+        }
+        downloadButton.disabled = !hasCode;
+      }
+
+      function insertPrefix(prefix) {
+        const existing = input.value;
+        let next;
+        if (existing.toUpperCase().startsWith(prefix.toUpperCase())) {
+          next = existing;
+        } else {
+          next = prefix + existing;
+        }
+        input.value = next;
+        input.focus();
+        input.setSelectionRange(next.length, next.length);
+        render();
+        showToast(existing.toUpperCase().startsWith(prefix.toUpperCase()) ? 'Prefix already added' : `${prefix} inserted`);
+      }
+
+      function downloadFile(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
+      function downloadCode() {
+        const value = input.value.trim();
+        if (!hasCode || !value) return;
+        const safeName = value.replace(/[^a-z0-9_-]+/gi, '_').replace(/^_+|_+$/g, '').slice(0, 70) || 'code';
+        if (mode === 'barcode') {
+          const svgCopy = barcodeSvg.cloneNode(true);
+          svgCopy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+          const source = new XMLSerializer().serializeToString(svgCopy);
+          downloadFile(new Blob([source], { type: 'image/svg+xml;charset=utf-8' }), `${safeName}-barcode.svg`);
+          showToast('Barcode downloaded as SVG');
+        } else {
+          const canvas = qrCanvasBox.querySelector('canvas');
+          const image = qrCanvasBox.querySelector('img');
+          if (canvas) {
+            canvas.toBlob(blob => {
+              if (blob) downloadFile(blob, `${safeName}-qr.png`);
+              else showToast('Could not export QR image');
+            }, 'image/png');
+          } else if (image && image.src) {
+            const a = document.createElement('a');
+            a.href = image.src;
+            a.download = `${safeName}-qr.png`;
+            a.click();
+          }
+          showToast('QR code downloaded');
+        }
+      }
+
+      input.addEventListener('input', render);
+      barcodeMode.addEventListener('click', () => switchMode('barcode'));
+      qrMode.addEventListener('click', () => switchMode('qr'));
+      document.querySelectorAll('[data-prefix]').forEach(button => {
+        button.addEventListener('click', () => insertPrefix(button.dataset.prefix));
+      });
+      document.getElementById('clearButton').addEventListener('click', () => {
+        input.value = '';
+        render();
+        input.focus();
+      });
+      downloadButton.addEventListener('click', downloadCode);
+      copyButton.addEventListener('click', async () => {
+        if (!input.value) return;
+        try {
+          await navigator.clipboard.writeText(input.value);
+          showToast('Text copied');
+        } catch (error) {
+          input.select();
+          const copied = document.execCommand('copy');
+          input.setSelectionRange(input.value.length, input.value.length);
+          showToast(copied ? 'Text copied' : 'Copy is not available in this browser');
+        }
+      });
+
+      render();
+    })();
+  </script>
+</body>
+</html>
